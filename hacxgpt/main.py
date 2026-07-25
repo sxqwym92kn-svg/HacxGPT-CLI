@@ -19,10 +19,10 @@ class App:
     def __init__(self):
         self.ui = UI()
         self.brain = None
-        
+
     def setup(self) -> bool:
         Config.initialize()
-        
+
         # Check for updates on setup
         try:
             is_update, remote_v = Updater.check_for_updates()
@@ -30,16 +30,16 @@ class App:
                 self.ui.show_msg("Update Available", f"A new version of HacxGPT ({remote_v}) is available.\nRun '/update' to install it.", "yellow")
         except:
             pass # Silent fail if offline
-            
+
         key = Config.get_api_key()
-        
+
         if not key:
             self.ui.banner()
             self.ui.show_msg("Warning", f"No API Key found for {Config.get_provider().upper()}.", "yellow")
             if self.ui.get_input("Configure system keys now? (y/n)").lower().startswith('y'):
                 return self.configure_key() # Let user choose which one to configure
-            return False
-            
+            return True
+
         try:
             with self.ui.console.status("[bold green]Verifying Neural Link...[/]"):
                 self.brain = HacxBrain(key)
@@ -49,7 +49,7 @@ class App:
             self.ui.show_msg("Auth Failed", f"Key verification failed: {e}", "red")
             if self.ui.get_input("Re-enter key? (y/n)").lower().startswith('y'):
                 return self.configure_key(Config.get_provider())
-            return False
+            return True
 
     def configure_key(self, provider: str = None) -> bool:
         self.ui.banner()
@@ -58,7 +58,7 @@ class App:
             providers = list(Config.PROVIDERS.keys())
             for i, p in enumerate(providers, 1):
                 self.ui.console.print(f" [{i}] {p.upper()}")
-            
+
             choice = self.ui.get_input("Select #")
             if choice.isdigit() and 1 <= int(choice) <= len(providers):
                 provider = providers[int(choice)-1]
@@ -67,13 +67,13 @@ class App:
 
         p_cfg = Config.PROVIDERS[provider]
         key_var = p_cfg["key_var"]
-        
+
         # 1. Select Model
         self.ui.console.print(f"\n[bold cyan]Select Default Model for {provider.upper()}:[/]")
         models = p_cfg.get("models", [])
         for i, m in enumerate(models, 1):
             self.ui.console.print(f" [{i}] {m['alias']} ({m['name']})")
-        
+
         m_choice = self.ui.get_input("Select Model #")
         selected_model = None
         if m_choice.isdigit() and 1 <= int(m_choice) <= len(models):
@@ -90,7 +90,7 @@ class App:
 
         if not key.strip():
             return False
-            
+
         # Ensure .hacx exists or create it
         if not os.path.exists(Config.ENV_FILE):
              with open(Config.ENV_FILE, 'w') as f: f.write("")
@@ -100,10 +100,10 @@ class App:
         set_key(Config.ENV_FILE, key_var, encrypted_key)
         set_key(Config.ENV_FILE, "HACX_ACTIVE_PROVIDER", provider)
         set_key(Config.ENV_FILE, "HACX_ACTIVE_MODEL", selected_model)
-        
+
         Config.ACTIVE_PROVIDER = provider
         Config.ACTIVE_MODEL = selected_model
-        
+
         self.ui.show_msg("Success", f"Configuration saved for {provider.upper()}.", "green")
         time.sleep(1)
         Config.initialize()
@@ -113,19 +113,19 @@ class App:
         if not self.brain: return
         self.ui.banner()
         self.ui.show_msg("Connected", "HacxGPT Uplink Established.\nType '/help' for commands.\n[dim]Tip: Press Enter to send, Alt+Enter for newlines.[/]", "green")
-        
+
         while True:
             try:
                 # Dynamic prompt label with model info
                 current_model = Config.get_model()
                 label = f"HACX-GPT:{current_model}"
-                
+
                 # Enable multiline for chat
                 prompt = self.ui.get_input(label, multiline=True).strip()
                 if not prompt: continue
-                
+
                 if prompt.lower() == '/exit': return
-                if prompt.lower() == '/new': 
+                if prompt.lower() == '/new':
                     self.brain.reset()
                     self.ui.clear()
                     self.ui.banner()
@@ -148,7 +148,7 @@ class App:
                     )
                     self.ui.show_msg("Help", help_text, "magenta")
                     continue
-                
+
                 if prompt.lower().startswith('/save'):
                     parts = prompt.split()
                     if len(parts) < 2:
@@ -170,7 +170,7 @@ class App:
                     else:
                         self.ui.show_msg("Error", f"Session '{name}' not found.", "red")
                     continue
-                
+
                 if prompt.lower() == '/sessions':
                     sessions = self.brain.list_sessions()
                     if not sessions:
@@ -190,7 +190,7 @@ class App:
                     else:
                         self.ui.show_msg("Error", msg, "red")
                     continue
-                
+
                 if prompt.lower() == '/setup':
                     if self.configure_key():
                         self.ui.show_msg("System Updated", "Neural links re-initialized with new credentials.", "green")
@@ -211,7 +211,7 @@ class App:
                     if len(parts) < 2:
                         self.ui.show_msg("Usage", "/provider <name>", "yellow")
                         continue
-                        
+
                     new_p = parts[1].lower()
                     if new_p in Config.PROVIDERS:
                         p_cfg = Config.PROVIDERS[new_p]
@@ -239,7 +239,7 @@ class App:
                     if len(parts) < 2:
                         self.ui.show_msg("Usage", "/model <name>", "yellow")
                         continue
-                        
+
                     new_m = parts[1]
                     # Check if model is in supported list or just allow it
                     self.brain.set_model(new_m)
@@ -248,22 +248,22 @@ class App:
                         msg += "\n[bold red]NEURAL LINK ESTABLISHED: HACXGPT CORE ENGAGED. SYSTEMS UNBOUND.[/]"
                     self.ui.show_msg("Neural Link Updated", msg, "green")
                     continue
-                
+
                 generator = self.brain.chat(prompt)
                 response_text = self.ui.stream_markdown("HacxGPT", generator)
-                
+
                 self.ui.handle_code_blocks(response_text)
-                
+
             except KeyboardInterrupt:
                 self.ui.console.print("\n[bold red]Interrupt Signal Received.[/]")
                 break
-    
+
     def about(self):
         self.ui.banner()
-        
+
         readme_url = "https://raw.githubusercontent.com/HacxGPT-Official/HacxGPT-CLI/main/README.md"
         content = ""
-        
+
         try:
             with self.ui.console.status("[bold green]Fetching System Manifesto from GitHub...[/]"):
                 import urllib.request
@@ -287,22 +287,22 @@ class App:
 
 *Developed by BlackTechX*
             """
-            
+
         from rich.markdown import Markdown
         from rich.panel import Panel
-        
+
         # Render markdown
         md = Markdown(content)
         self.ui.console.print(Panel(md, title="[bold]Manifesto / README[/]", border_style="cyan", padding=(1, 2)))
-        
+
         self.ui.console.print("\n[dim]Press any key to return...[/]")
         from .utils.system import get_char
         get_char()
 
     def start(self):
         # Check dependencies on startup
-        check_dependencies() 
-        
+        check_dependencies()
+
         if not self.setup():
             self.ui.console.print("[red]System Halted: Authorization missing.[/]")
             return
@@ -311,7 +311,7 @@ class App:
             self.ui.banner()
             self.ui.main_menu()
             choice = self.ui.get_input("MENU")
-            
+
             if choice == '1':
                 self.run_chat()
             elif choice == '2':
